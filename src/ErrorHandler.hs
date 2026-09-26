@@ -1,7 +1,4 @@
-module MyLib (someFunc) where
-
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+module ErrorHandler where
 
 type LineNum = Int
 
