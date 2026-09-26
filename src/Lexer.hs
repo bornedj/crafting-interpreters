@@ -90,3 +90,49 @@ boolToken = tokenTrue <|> tokenFalse
     where
         tokenTrue = Keyword True' <$ stringParser "True"
         tokenFalse = Keyword False' <$ stringParser "False"
+
+-- data KeywordsTokenType = And | Class | Else | False' | True' | Fun | For | If | Nil | Or | Print | Return | Super | This | Var | While deriving (Show, Eq)
+keywordToken :: Parser TokenType
+keywordToken = and' <|> class' <|> else' <|> boolToken <|> fun <|> for' <|> if' <|> nil <|> or' <|> print' <|> return' <|> super <|> this <|> var <|> while where
+    and' = Keyword And <$ stringParser "and"
+    class' = Keyword Class <$ stringParser "class"
+    else' = Keyword Else <$ stringParser "else"
+    fun = Keyword Fun <$ stringParser "fun"
+    for' = Keyword For <$ stringParser "for"
+    if' = Keyword If <$ stringParser "if"
+    nil = Keyword Nil <$ stringParser "nil"
+    or' = Keyword Or <$ stringParser "or"
+    print' = Keyword Print <$ stringParser "print"
+    return' = Keyword Return <$ stringParser "return"
+    super = Keyword Super <$ stringParser "super"
+    this = Keyword This <$ stringParser "this"
+    var = Keyword Var <$ stringParser "var"
+    while = Keyword While <$ stringParser "while"
+
+
+singleCharToken :: Parser TokenType
+singleCharToken = leftParen <|> rightParen <|> leftBrace <|> rightBrace <|> comma <|> dot <|> minus <|> plus <|> semicolon <|> slash <|> star
+    where
+        leftParen = SingleChar LeftParen <$ stringParser "("
+        rightParen = SingleChar RightParen <$ stringParser ")"
+        leftBrace = SingleChar LeftBrace <$ stringParser "["
+        rightBrace = SingleChar RightBrace <$ stringParser "]"
+        comma = SingleChar RightBrace <$ stringParser ","
+        dot = SingleChar Dot <$ stringParser "."
+        minus = SingleChar Minus <$ stringParser "-"
+        plus = SingleChar Plus <$ stringParser "+"
+        semicolon = SingleChar Semicolon <$ stringParser ";"
+        slash = SingleChar Slash <$ stringParser "/"
+        star = SingleChar Star <$ stringParser "*"
+
+fewCharToken :: Parser TokenType
+fewCharToken = bang <|> bangEqual <|> equalEqual <|> equal <|> greater <|> greaterEqual <|> lesser <|> lesserEqual
+    where
+        bang = FewChar Bang <$ stringParser "!"
+        bangEqual = FewChar BangEqual <$ stringParser "!="
+        equal = FewChar Equal <$ stringParser "="
+        equalEqual = FewChar EqualEqual <$ stringParser "=="
+        greater = FewChar Greater <$ stringParser ">"
+        greaterEqual = FewChar GreaterEqual <$ stringParser ">="
+        lesser = FewChar Lesser <$ stringParser "<"
+        lesserEqual = FewChar LesserEqual <$ stringParser "<="
