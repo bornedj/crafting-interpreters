@@ -11,7 +11,7 @@ cabal-version:      3.12
 --   http://haskell.org/cabal/users-guide/
 --
 -- The name of the package.
-name:               crafting-interpreters
+name:               jlox
 
 -- The package version.
 -- See the Haskell package versioning policy (PVP) for standards
@@ -77,7 +77,7 @@ library
     -- Base language which the package is written in.
     default-language: GHC2024
 
-executable crafting-interpreters
+executable jlox
     -- Import common warning flags.
     import:           warnings
 
@@ -93,7 +93,7 @@ executable crafting-interpreters
     -- Other library packages from which modules are imported.
     build-depends:
         base ^>=4.20.2.0,
-        crafting-interpreters
+        jlox
 
     -- Directories containing source files.
     hs-source-dirs:   exe
@@ -101,7 +101,7 @@ executable crafting-interpreters
     -- Base language which the package is written in.
     default-language: GHC2024
 
-test-suite crafting-interpreters-test
+test-suite jlox-test
     -- Import common warning flags.
     import:           warnings
 
@@ -126,4 +126,4 @@ test-suite crafting-interpreters-test
     -- Test dependencies.
     build-depends:
         base ^>=4.20.2.0,
-        crafting-interpreters
+        jlox
