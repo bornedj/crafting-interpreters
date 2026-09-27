@@ -2,7 +2,8 @@
 
 module Lexer where
 
-import Control.Applicative (Alternative, empty, (<|>))
+import Control.Applicative (Alternative, empty, many, (<|>))
+import Data.Char (isSpace)
 
 -- regex for variable names and the like, same as C
 -- [a-zA-Z_][a-zA-Z_0-9]*
@@ -11,19 +12,20 @@ data SingleCharTokenType = LeftParen | RightParen | LeftBrace | RightBrace | Com
 
 data FewCharTokenType = Bang | BangEqual | Equal | EqualEqual | Greater | GreaterEqual | Lesser | LesserEqual deriving (Show, Eq)
 
-data LiteralTokeType = Identifer | String | Number deriving (Show, Eq)
+data LiteralTokenType = Identifier | String | Number deriving (Show, Eq)
 
 data KeywordsTokenType = And | Class | Else | False' | True' | Fun | For | If | Nil | Or | Print | Return | Super | This | Var | While deriving (Show, Eq)
 
-data TokenType = SingleChar SingleCharTokenType
-                  | FewChar FewCharTokenType
-                  | Literal LiteralTokeType
-                  | Keyword KeywordsTokenType
-                  deriving (Show, Eq)
+data TokenType
+  = SingleChar SingleCharTokenType
+  | FewChar FewCharTokenType
+  | Literal LiteralTokenType
+  | Keyword KeywordsTokenType
+  deriving (Show, Eq)
 
-data Token = Token {tokenType :: TokenType, lexeme :: String, line :: Int}
+data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int}
 
-data ParserError = ParserError Int String deriving (Show)
+data ParserError = ParserError Int String deriving (Show, Eq)
 
 data Input = Input
   { inputLoc :: Int,
@@ -85,15 +87,47 @@ stringParser str = Parser f
         Left $ ParserError (inputLoc input) ("Expected \"" ++ str ++ "', but found '" ++ inputStr input ++ "'")
       result -> result
 
+-- parse strings that statisfy a predicate
+spanParser :: String -> (Char -> Bool) -> Parser String
+spanParser description = many . parseIf description
+
+-- parser of charater that satisfies a predicate
+parseIf :: String -> (Char -> Bool) -> Parser Char
+parseIf desc predicate = Parser f
+  where
+    f input = case input of
+      (inputUncons -> Just (y, ys))
+        | predicate y -> Right (ys, y)
+        | otherwise ->
+            Left $
+              ParserError (inputLoc input) ("Expected " ++ desc ++ ", but found '" ++ [y] ++ "'")
+      _ -> Left $ ParserError (inputLoc input) ("Expected " ++ desc ++ ", but reached the end of a string")
+
+-- white space parser
+ws :: Parser String
+ws = spanParser "whitespace character" isSpace
+
+-- need to read the book to understand our escape chars
+escapeChar :: Parser Char
+escapeChar = undefined
+
+-- parser of character that is not " or \\
+normalChar :: Parser Char
+normalChar = parseIf "non-special character" ((&&) <$> (/= '"') <*> (/= '\\'))
+
+-- parser of string between double quotes
+stringLiteral :: Parser String
+stringLiteral = charParser '"' *> many (normalChar <|> escapeChar) <* charParser '"'
+
 boolToken :: Parser TokenType
 boolToken = tokenTrue <|> tokenFalse
-    where
-        tokenTrue = Keyword True' <$ stringParser "True"
-        tokenFalse = Keyword False' <$ stringParser "False"
+  where
+    tokenTrue = Keyword True' <$ stringParser "True"
+    tokenFalse = Keyword False' <$ stringParser "False"
 
--- data KeywordsTokenType = And | Class | Else | False' | True' | Fun | For | If | Nil | Or | Print | Return | Super | This | Var | While deriving (Show, Eq)
 keywordToken :: Parser TokenType
-keywordToken = and' <|> class' <|> else' <|> boolToken <|> fun <|> for' <|> if' <|> nil <|> or' <|> print' <|> return' <|> super <|> this <|> var <|> while where
+keywordToken = and' <|> class' <|> else' <|> boolToken <|> fun <|> for' <|> if' <|> nil <|> or' <|> print' <|> return' <|> super <|> this <|> var <|> while
+  where
     and' = Keyword And <$ stringParser "and"
     class' = Keyword Class <$ stringParser "class"
     else' = Keyword Else <$ stringParser "else"
@@ -109,30 +143,46 @@ keywordToken = and' <|> class' <|> else' <|> boolToken <|> fun <|> for' <|> if' 
     var = Keyword Var <$ stringParser "var"
     while = Keyword While <$ stringParser "while"
 
-
 singleCharToken :: Parser TokenType
 singleCharToken = leftParen <|> rightParen <|> leftBrace <|> rightBrace <|> comma <|> dot <|> minus <|> plus <|> semicolon <|> slash <|> star
-    where
-        leftParen = SingleChar LeftParen <$ stringParser "("
-        rightParen = SingleChar RightParen <$ stringParser ")"
-        leftBrace = SingleChar LeftBrace <$ stringParser "["
-        rightBrace = SingleChar RightBrace <$ stringParser "]"
-        comma = SingleChar RightBrace <$ stringParser ","
-        dot = SingleChar Dot <$ stringParser "."
-        minus = SingleChar Minus <$ stringParser "-"
-        plus = SingleChar Plus <$ stringParser "+"
-        semicolon = SingleChar Semicolon <$ stringParser ";"
-        slash = SingleChar Slash <$ stringParser "/"
-        star = SingleChar Star <$ stringParser "*"
+  where
+    leftParen = SingleChar LeftParen <$ stringParser "("
+    rightParen = SingleChar RightParen <$ stringParser ")"
+    leftBrace = SingleChar LeftBrace <$ stringParser "["
+    rightBrace = SingleChar RightBrace <$ stringParser "]"
+    comma = SingleChar RightBrace <$ stringParser ","
+    dot = SingleChar Dot <$ stringParser "."
+    minus = SingleChar Minus <$ stringParser "-"
+    plus = SingleChar Plus <$ stringParser "+"
+    semicolon = SingleChar Semicolon <$ stringParser ";"
+    slash = SingleChar Slash <$ stringParser "/"
+    star = SingleChar Star <$ stringParser "*"
 
 fewCharToken :: Parser TokenType
-fewCharToken = bang <|> bangEqual <|> equalEqual <|> equal <|> greater <|> greaterEqual <|> lesser <|> lesserEqual
-    where
-        bang = FewChar Bang <$ stringParser "!"
-        bangEqual = FewChar BangEqual <$ stringParser "!="
-        equal = FewChar Equal <$ stringParser "="
-        equalEqual = FewChar EqualEqual <$ stringParser "=="
-        greater = FewChar Greater <$ stringParser ">"
-        greaterEqual = FewChar GreaterEqual <$ stringParser ">="
-        lesser = FewChar Lesser <$ stringParser "<"
-        lesserEqual = FewChar LesserEqual <$ stringParser "<="
+fewCharToken = bangEqual <|> bang <|> equalEqual <|> equal <|> greaterEqual <|> greater <|> lesserEqual <|> lesser
+  where
+    bang = FewChar Bang <$ stringParser "!"
+    bangEqual = FewChar BangEqual <$ stringParser "!="
+    equal = FewChar Equal <$ stringParser "="
+    equalEqual = FewChar EqualEqual <$ stringParser "=="
+    greater = FewChar Greater <$ stringParser ">"
+    greaterEqual = FewChar GreaterEqual <$ stringParser ">="
+    lesser = FewChar Lesser <$ stringParser "<"
+    lesserEqual = FewChar LesserEqual <$ stringParser "<="
+
+literalToken :: Parser TokenType
+literalToken = identifier <|> number <|> string
+  where
+    identifier = undefined
+    number = undefined
+    string = undefined
+
+tokenizer :: Parser TokenType
+tokenizer = singleCharToken <|> fewCharToken <|> keywordToken <|> literalToken
+
+-- tokenizeLine :: String -> [TokenType]
+-- tokenizeLine line = (runParser tokenizer) <$> (words line)
+
+-- scanTokens :: String -> [Token]
+-- scanTokens str = zipWith mapLine [0..] $ lines str
+--     where mapLine lineNum line = do
