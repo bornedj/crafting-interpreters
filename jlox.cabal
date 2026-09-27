@@ -126,4 +126,5 @@ test-suite jlox-test
     -- Test dependencies.
     build-depends:
         base ^>=4.20.2.0,
-        jlox
+        jlox,
+        hspec
