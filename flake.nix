@@ -9,12 +9,12 @@
     system = "x86_64-linux";
     pkgs = import nixpkgs { inherit system; };
     hp = pkgs.haskellPackages;
-    crafting-interpreters = hp.callCabal2nix "crafting-interpreters" ./. {};
+    jlox = hp.callCabal2nix "jlox" ./. {};
   in {
 
-    packages.${system}.default = crafting-interpreters;
+    packages.${system}.default = jlox;
     devShells.${system}.default = hp.shellFor {
-        packages = _: [ crafting-interpreters ];
+        packages = _: [ jlox ];
         nativeBuildInputs = [
             pkgs.cabal-install
             hp.hoogle
