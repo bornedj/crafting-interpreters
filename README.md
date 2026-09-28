@@ -1,6 +1,6 @@
 # Crafting interpreters
 
-Following the crafting interprets book by Rober Nystrom.
+Following the crafting interprets book by Robert Nystrom.
 
 I'm expecting to at least deliver the tree walking interpreter with haskell. I
 may build the compiler with it as well, but could also switch to rust at that
