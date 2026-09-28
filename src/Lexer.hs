@@ -12,7 +12,7 @@ data SingleCharTokenType = LeftParen | RightParen | LeftBrace | RightBrace | Com
 
 data FewCharTokenType = Bang | BangEqual | Equal | EqualEqual | Greater | GreaterEqual | Lesser | LesserEqual deriving (Show, Eq)
 
-data LiteralTokenType = Identifier | String | Number deriving (Show, Eq)
+data LiteralTokenType = Identifier | String' | Number deriving (Show, Eq)
 
 data KeywordsTokenType = And | Class | Else | False' | True' | Fun | For | If | Nil | Or | Print | Return | Super | This | Var | While deriving (Show, Eq)
 
