@@ -23,16 +23,34 @@ data TokenType
   | Keyword KeywordsTokenType
   deriving (Show, Eq)
 
-data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int}
+-- TODO: populate lexeme/line/column once in a
+-- `located :: Parser TokenType -> Parser Token` combinator rather than in every
+-- token rule, since the rules below all use `<$` and discard the text they
+-- matched. Taking the length difference between the input before and after a
+-- rule runs recovers the lexeme without touching any of them.
+data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int, columnNumber :: Int}
 
+-- TODO: the Int is an absolute offset, which cannot be reported to a user.
+-- Carry line and column instead, so errors can point at a position in a file.
 data ParserError = ParserError Int String deriving (Show, Eq)
 
+-- TODO: replace inputLoc with inputLine and inputCol. Tracking position here,
+-- rather than by splitting the source with `lines` and zipping line numbers,
+-- is what allows a string literal to span newlines -- which Lox permits, and
+-- `lines` makes unrepresentable because it also discards the newline chars.
+-- TODO: add `mkInput :: String -> Input` before making this change. Every test
+-- constructs Input positionally (`Input 0 "=="`), so all of them break on a
+-- field change; a smart constructor keeps that churn to one edit.
 data Input = Input
   { inputLoc :: Int,
     inputStr :: String
   }
   deriving (Show, Eq)
 
+-- TODO: special-case '\n' to increment the line and reset the column. Every
+-- combinator below routes through here, so they all inherit correct tracking.
+-- `ws` uses isSpace, which consumes newlines, so line counting between tokens
+-- comes free once this is done.
 inputUncons :: Input -> Maybe (Char, Input)
 inputUncons (Input _ []) = Nothing
 inputUncons (Input loc (x : xs)) = Just (x, Input (loc + 1) xs)
@@ -58,6 +76,9 @@ instance Alternative Parser where
   (Parser p1) <|> (Parser p2) =
     Parser $ \input -> p1 input <|> p2 input
 
+-- TODO: this discards the first error, so every message comes from the last
+-- alternative tried: input '@' reports "Expected while, but found '@'". Keep
+-- whichever error reached the furthest position instead.
 instance Alternative (Either ParserError) where
   empty = Left $ ParserError 0 "empty"
   Left _ <|> e2 = e2
@@ -88,6 +109,9 @@ stringParser str = Parser f
       result -> result
 
 -- parse strings that statisfy a predicate
+-- TODO: this succeeds on zero characters. Anything built on it that feeds an
+-- outer `many` must be forced to consume at least one char, or the outer `many`
+-- spins forever.
 spanParser :: String -> (Char -> Bool) -> Parser String
 spanParser description = many . parseIf description
 
@@ -107,7 +131,9 @@ parseIf desc predicate = Parser f
 ws :: Parser String
 ws = spanParser "whitespace character" isSpace
 
--- need to read the book to understand our escape chars
+-- TODO: delete this. Chapter 4 Lox has no escape sequences, and the `undefined`
+-- is reachable -- `many (normalChar <|> escapeChar)` forces it the moment
+-- normalChar fails, which is on every closing quote.
 escapeChar :: Parser Char
 escapeChar = undefined
 
@@ -116,15 +142,24 @@ normalChar :: Parser Char
 normalChar = parseIf "non-special character" ((&&) <$> (/= '"') <*> (/= '\\'))
 
 -- parser of string between double quotes
+-- TODO: drop the escapeChar alternative, leaving `many normalChar`. Once Input
+-- tracks lines, this handles multi-line literals with no extra work.
 stringLiteral :: Parser String
 stringLiteral = charParser '"' *> many (normalChar <|> escapeChar) <* charParser '"'
 
+-- TODO: Lox spells these lowercase, "true" and "false". This parser also goes
+-- away entirely once keywords are recognised via the identifier lookup below.
 boolToken :: Parser TokenType
 boolToken = tokenTrue <|> tokenFalse
   where
     tokenTrue = Keyword True' <$ stringParser "True"
     tokenFalse = Keyword False' <$ stringParser "False"
 
+-- TODO: this breaks maximal munch -- "andy" lexes as `and` followed by an
+-- identifier, and no amount of reordering fixes it. Replace the whole chain
+-- with the book's approach: lex an identifier, then look the text up in a
+-- keyword table, falling back to Literal Identifier. That is a plain fmap over
+-- `lookup`, so no Monad instance is needed.
 keywordToken :: Parser TokenType
 keywordToken = and' <|> class' <|> else' <|> boolToken <|> fun <|> for' <|> if' <|> nil <|> or' <|> print' <|> return' <|> super <|> this <|> var <|> while
   where
@@ -143,21 +178,26 @@ keywordToken = and' <|> class' <|> else' <|> boolToken <|> fun <|> for' <|> if' 
     var = Keyword Var <$ stringParser "var"
     while = Keyword While <$ stringParser "while"
 
+-- TODO: no test coverage, unlike fewCharToken and keywordToken
 singleCharToken :: Parser TokenType
 singleCharToken = leftParen <|> rightParen <|> leftBrace <|> rightBrace <|> comma <|> dot <|> minus <|> plus <|> semicolon <|> slash <|> star
   where
     leftParen = SingleChar LeftParen <$ stringParser "("
     rightParen = SingleChar RightParen <$ stringParser ")"
-    leftBrace = SingleChar LeftBrace <$ stringParser "["
-    rightBrace = SingleChar RightBrace <$ stringParser "]"
-    comma = SingleChar RightBrace <$ stringParser ","
+    leftBrace = SingleChar LeftBrace <$ stringParser "{"
+    rightBrace = SingleChar RightBrace <$ stringParser "}"
+    comma = SingleChar Comma <$ stringParser ","
     dot = SingleChar Dot <$ stringParser "."
     minus = SingleChar Minus <$ stringParser "-"
     plus = SingleChar Plus <$ stringParser "+"
     semicolon = SingleChar Semicolon <$ stringParser ";"
+    -- TODO: when line comments arrive, the "//" parser has to be tried before
+    -- this one, and singleCharToken is the first alternative in tokenizer
     slash = SingleChar Slash <$ stringParser "/"
     star = SingleChar Star <$ stringParser "*"
 
+-- Ordering is load-bearing: <|> retries from the original input, so the longest
+-- alternative must come first or "!=" stops after matching the '!'.
 fewCharToken :: Parser TokenType
 fewCharToken = bangEqual <|> bang <|> equalEqual <|> equal <|> greaterEqual <|> greater <|> lesserEqual <|> lesser
   where
@@ -173,12 +213,38 @@ fewCharToken = bangEqual <|> bang <|> equalEqual <|> equal <|> greaterEqual <|> 
 literalToken :: Parser TokenType
 literalToken = identifier <|> number <|> string
   where
+    -- TODO: must consume at least one character, so build it as
+    -- (:) <$> parseIf alphaOrUnderscore <*> spanParser alphaNumOrUnderscore.
+    -- A bare spanParser succeeds on the empty match, which makes tokenizer
+    -- succeed without advancing and hangs the outer `many` on input like '@'.
+    -- TODO: this is also where keyword recognition belongs -- look the matched
+    -- text up in a keyword table and fall back to Literal Identifier.
     identifier = undefined
     number = undefined
+    -- TODO: wrap stringLiteral
     string = undefined
 
+-- TODO: a "//" comment parser has to precede singleCharToken here, otherwise
+-- slash claims the first '/'.
 tokenizer :: Parser TokenType
 tokenizer = singleCharToken <|> fewCharToken <|> keywordToken <|> literalToken
+
+-- TODO: both of these sketches are dead ends, replace them with a single
+-- `many (ws *> located tokenizer) <* ws <* eof`. The repetition that jsonValue
+-- got from being a recursive data type comes from `many` instead -- TokenType
+-- does not need to recurse, and there is no need to thread Right results by
+-- hand.
+--
+-- `words` cannot be used: Lox tokens are not whitespace delimited, e.g. "a+b"
+-- and "(1+2);". `lines` cannot be used either, because Lox strings may span
+-- newlines -- see the Input TODO above.
+--
+-- Two traps in `many` to guard against:
+--   1. it stops silently on the first failure, so "var x = @@@" would report
+--      three tokens and success. An `eof :: Parser ()` that fails on leftover
+--      input is what turns that into an error.
+--   2. it loops forever if tokenizer can succeed without consuming input --
+--      see the identifier TODO.
 
 -- tokenizeLine :: String -> [TokenType]
 -- tokenizeLine line = (runParser tokenizer) <$> (words line)
