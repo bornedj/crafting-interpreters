@@ -12,7 +12,7 @@ data SingleCharTokenType = LeftParen | RightParen | LeftBrace | RightBrace | Com
 
 data FewCharTokenType = Bang | BangEqual | Equal | EqualEqual | Greater | GreaterEqual | Lesser | LesserEqual deriving (Show, Eq)
 
-data LiteralTokenType = Identifier String | String' String | Double String deriving (Show, Eq)
+data LiteralTokenType = Identifier String | String' String | Number Double deriving (Show, Eq)
 
 data KeywordsTokenType = And | Class | Else | False' | True' | Fun | For | If | Nil | Or | Print | Return | Super | This | Var | While deriving (Show, Eq)
 
@@ -35,30 +35,8 @@ type ColumnNumber = Int
 data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: LineNumber, columnNumber :: ColumnNumber} deriving (Show, Eq)
 
 
--- TODO: split this into two constructors, UnexpectedEof and Unexpected. The
--- REPL feeds one getLine entry at a time, so it has to tell "incomplete, could
--- be continued" apart from "invalid, report and reset" -- and charParser and
--- parseIf below already produce exactly those two failures, with the
--- distinction trapped in the message String where the driver cannot branch on
--- it.
--- Chapter 4 should still report and reset on an unterminated string, matching
--- the book; the constructor split is worth doing now only because it is cheap
--- and is what a continuation prompt would later need.
-data ParserError = Unexpected LineNumber ColumnNumber String  | UnexpectedEof ColumnNumber String deriving (Show, Eq)
+data ParserError = Unexpected LineNumber ColumnNumber String  | UnexpectedEof LineNumber String deriving (Show, Eq)
 
--- TODO: replace inputLoc with inputLine and inputCol. Tracking position here,
--- rather than by splitting the source with `lines` and zipping line numbers,
--- is what allows a string literal to span newlines -- which Lox permits, and
--- `lines` makes unrepresentable because it also discards the newline chars.
--- TODO: add `mkInput :: String -> Input` before making this change. Every test
--- constructs Input positionally (`Input 0 "=="`), so all of them break on a
--- field change; a smart constructor keeps that churn to one edit.
--- Decide the line origin before writing it, since that fixes the signature: the
--- REPL lexes each entry independently, so a hardcoded origin of line 1 means
--- every entry reports line 1 (this is what book jlox does, building a fresh
--- Scanner per entry). Cumulative numbering across entries instead needs
--- `mkInputAt :: Int -> String -> Input` and a counter threaded through the REPL
--- loop.
 data Input = Input
   { inputLine :: LineNumber,
     inputCol :: ColumnNumber,
@@ -74,13 +52,9 @@ mkInputAt line i = Input line 0 i
 mkInput :: String -> Input
 mkInput i = Input 1 0 i
 
--- TODO: special-case '\n' to increment the line and reset the column. Every
--- combinator below routes through here, so they all inherit correct tracking.
--- `ws` uses isSpace, which consumes newlines, so line counting between tokens
--- comes free once this is done.
 inputUncons :: Input -> Maybe (Char, Input)
 inputUncons (Input _ _ []) = Nothing
-inputUncons (Input line col ('\n' : xs)) = Just ('\n', Input (line + 1) (col + 1) xs)
+inputUncons (Input line _ ('\n' : xs)) = Just ('\n', Input (line + 1) 0 xs)
 inputUncons (Input line col (x : xs)) = Just (x, Input line (col + 1) xs)
 
 newtype Parser a = Parser {runParser :: Input -> Either ParserError (Input, a)}
@@ -281,7 +255,7 @@ tokenizer = singleCharToken <|> fewCharToken <|> keywordToken <|> literalToken
 --      three tokens and success. An `eof :: Parser ()` that fails on leftover
 --      input is what turns that into an error.
 --   2. it loops forever if tokenizer can succeed without consuming input --
---
+
 -- This shape is unchanged by the REPL. Input is just a String, so the lexer
 -- does not care where the text came from; the driver decides how much text is
 -- one lex, and each REPL entry is a complete source that must be fully
