@@ -12,10 +12,18 @@ data SingleCharTokenType = LeftParen | RightParen | LeftBrace | RightBrace | Com
 
 data FewCharTokenType = Bang | BangEqual | Equal | EqualEqual | Greater | GreaterEqual | Lesser | LesserEqual deriving (Show, Eq)
 
+-- TODO: these carry no value, so the scanned text is lost. The book's Token has
+-- an `Object literal` field for exactly this; in Haskell the payload belongs on
+-- the constructors: Identifier String | String' String | Number Double. Lox
+-- numbers are all doubles, so "123" lexes to 123.0.
 data LiteralTokenType = Identifier | String' | Number deriving (Show, Eq)
 
 data KeywordsTokenType = And | Class | Else | False' | True' | Fun | For | If | Nil | Or | Print | Return | Super | This | Var | While deriving (Show, Eq)
 
+-- TODO: missing an Eof constructor. The four groups below cover 38 of the
+-- book's 39 token types, and EOF is the difference: scanTokens appends one, and
+-- the chapter 6 parser relies on it to know when to stop. It belongs here
+-- rather than inside any of the groups.
 data TokenType
   = SingleChar SingleCharTokenType
   | FewChar FewCharTokenType
@@ -28,11 +36,20 @@ data TokenType
 -- token rule, since the rules below all use `<$` and discard the text they
 -- matched. Taking the length difference between the input before and after a
 -- rule runs recovers the lexeme without touching any of them.
+-- TODO: needs `deriving (Show, Eq)`. Show is what chapter 4 ends on, run
+-- printing each scanned token; Eq is what lets the tests compare one.
 data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int, columnNumber :: Int}
 
--- TODO: the Int is an absolute offset, which cannot be reported to a user.
--- Carry line and column instead, so errors can point at a position in a file.
-data ParserError = ParserError Int String deriving (Show, Eq)
+-- TODO: split this into two constructors, UnexpectedEof and Unexpected. The
+-- REPL feeds one getLine entry at a time, so it has to tell "incomplete, could
+-- be continued" apart from "invalid, report and reset" -- and charParser and
+-- parseIf below already produce exactly those two failures, with the
+-- distinction trapped in the message String where the driver cannot branch on
+-- it.
+-- Chapter 4 should still report and reset on an unterminated string, matching
+-- the book; the constructor split is worth doing now only because it is cheap
+-- and is what a continuation prompt would later need.
+data ParserError = ParserError Int Int String deriving (Show, Eq)
 
 -- TODO: replace inputLoc with inputLine and inputCol. Tracking position here,
 -- rather than by splitting the source with `lines` and zipping line numbers,
@@ -41,6 +58,12 @@ data ParserError = ParserError Int String deriving (Show, Eq)
 -- TODO: add `mkInput :: String -> Input` before making this change. Every test
 -- constructs Input positionally (`Input 0 "=="`), so all of them break on a
 -- field change; a smart constructor keeps that churn to one edit.
+-- Decide the line origin before writing it, since that fixes the signature: the
+-- REPL lexes each entry independently, so a hardcoded origin of line 1 means
+-- every entry reports line 1 (this is what book jlox does, building a fresh
+-- Scanner per entry). Cumulative numbering across entries instead needs
+-- `mkInputAt :: Int -> String -> Input` and a counter threaded through the REPL
+-- loop.
 data Input = Input
   { inputLoc :: Int,
     inputStr :: String
@@ -78,7 +101,9 @@ instance Alternative Parser where
 
 -- TODO: this discards the first error, so every message comes from the last
 -- alternative tried: input '@' reports "Expected while, but found '@'". Keep
--- whichever error reached the furthest position instead.
+-- whichever error reached the furthest position instead. On a tie, prefer the
+-- end-of-input failure: "might still be completable" tells the REPL more than
+-- "definitely wrong here".
 instance Alternative (Either ParserError) where
   empty = Left $ ParserError 0 "empty"
   Left _ <|> e2 = e2
@@ -226,6 +251,12 @@ literalToken = identifier <|> number <|> string
 
 -- TODO: a "//" comment parser has to precede singleCharToken here, otherwise
 -- slash claims the first '/'.
+-- TODO: the book reports "Unexpected character." and keeps scanning, so one run
+-- surfaces every bad character; failing on Either stops at the first. To match
+-- it, add a last alternative that always succeeds by consuming one char and
+-- recording an error. Note that makes the outer `many` unable to fail, which
+-- demotes the trailing `eof` below from the thing that catches garbage to a
+-- redundant safety net.
 tokenizer :: Parser TokenType
 tokenizer = singleCharToken <|> fewCharToken <|> keywordToken <|> literalToken
 
@@ -244,6 +275,11 @@ tokenizer = singleCharToken <|> fewCharToken <|> keywordToken <|> literalToken
 --      three tokens and success. An `eof :: Parser ()` that fails on leftover
 --      input is what turns that into an error.
 --   2. it loops forever if tokenizer can succeed without consuming input --
+--
+-- This shape is unchanged by the REPL. Input is just a String, so the lexer
+-- does not care where the text came from; the driver decides how much text is
+-- one lex, and each REPL entry is a complete source that must be fully
+-- consumed, so the trailing `eof` is still wanted there.
 --      see the identifier TODO.
 
 -- tokenizeLine :: String -> [TokenType]
