@@ -25,17 +25,21 @@ data TokenType
   deriving (Show, Eq)
 
 type LineNumber = Int
+
 type ColumnNumber = Int
 
 -- TODO: populate lexeme/line/column once in a
 -- `located :: Parser TokenType -> Parser Token` combinator rather than in every
 -- token rule, since the rules below all use `<$` and discard the text they
--- matched. Taking the length difference between the input before and after a
--- rule runs recovers the lexeme without touching any of them.
+-- matched. Recovering the lexeme via `length (inputStr i) - length (inputStr
+-- i')` is tempting but O(n) per token since length walks the remaining input,
+-- so O(n*m) overall; restore an absolute offset field on Input (like the old
+-- inputLoc) so `located` can slice with `take (off' - off) (inputStr i)`
+-- instead, which is O(token length). Cheaper to decide this now than after
+-- located is written and every token position needs re-checking.
 data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: LineNumber, columnNumber :: ColumnNumber} deriving (Show, Eq)
 
-
-data ParserError = Unexpected LineNumber ColumnNumber String  | UnexpectedEof LineNumber String deriving (Show, Eq)
+data ParserError = Unexpected LineNumber ColumnNumber String | UnexpectedEof LineNumber String deriving (Show, Eq)
 
 data Input = Input
   { inputLine :: LineNumber,
@@ -44,6 +48,11 @@ data Input = Input
   }
   deriving (Show, Eq)
 
+-- TODO: lines are 1 indexed like the book, but columns start at 0 here and
+-- inputUncons resets to 0 on '\n' (both consistent, so no drift), which means
+-- every error currently reads "line 1, column 0" for the first character.
+-- Decide 0- vs 1-indexed columns before writing `located`, since it stamps
+-- inputCol onto every Token; 1-indexed to match lines is the natural choice.
 -- lines will be 1 indexed like the book
 mkInputAt :: LineNumber -> String -> Input
 mkInputAt line i = Input line 0 i
@@ -84,6 +93,10 @@ instance Alternative Parser where
 -- end-of-input failure: "might still be completable" tells the REPL more than
 -- "definitely wrong here".
 instance Alternative (Either ParserError) where
+  -- unreachable in practice (many/optional don't route through empty), but
+  -- line 0 and col 1 are inconsistent with each other regardless of which way
+  -- the column-indexing TODO on mkInput is decided -- worth fixing alongside
+  -- it if this ever becomes reachable
   empty = Left $ Unexpected 0 1 "empty"
   Left _ <|> e2 = e2
   e1 <|> _ = e1
@@ -136,52 +149,21 @@ parseIf desc predicate = Parser f
 ws :: Parser String
 ws = spanParser "whitespace character" isSpace
 
--- TODO: delete this. Chapter 4 Lox has no escape sequences, and the `undefined`
--- is reachable -- `many (normalChar <|> escapeChar)` forces it the moment
--- normalChar fails, which is on every closing quote.
-escapeChar :: Parser Char
-escapeChar = undefined
-
 -- parser of character that is not " or \\
 normalChar :: Parser Char
 normalChar = parseIf "non-special character" ((&&) <$> (/= '"') <*> (/= '\\'))
 
 -- parser of string between double quotes
--- TODO: drop the escapeChar alternative, leaving `many normalChar`. Once Input
--- tracks lines, this handles multi-line literals with no extra work.
 stringLiteral :: Parser String
-stringLiteral = charParser '"' *> many (normalChar <|> escapeChar) <* charParser '"'
+stringLiteral = charParser '"' *> many normalChar <* charParser '"'
 
--- TODO: Lox spells these lowercase, "true" and "false". This parser also goes
--- away entirely once keywords are recognised via the identifier lookup below.
+-- TODO: this parser goes away entirely once keywords are recognised via the
+-- identifier lookup below.
 boolToken :: Parser TokenType
 boolToken = tokenTrue <|> tokenFalse
   where
-    tokenTrue = Keyword True' <$ stringParser "True"
-    tokenFalse = Keyword False' <$ stringParser "False"
-
--- TODO: this breaks maximal munch -- "andy" lexes as `and` followed by an
--- identifier, and no amount of reordering fixes it. Replace the whole chain
--- with the book's approach: lex an identifier, then look the text up in a
--- keyword table, falling back to Literal Identifier. That is a plain fmap over
--- `lookup`, so no Monad instance is needed.
-keywordToken :: Parser TokenType
-keywordToken = and' <|> class' <|> else' <|> boolToken <|> fun <|> for' <|> if' <|> nil <|> or' <|> print' <|> return' <|> super <|> this <|> var <|> while
-  where
-    and' = Keyword And <$ stringParser "and"
-    class' = Keyword Class <$ stringParser "class"
-    else' = Keyword Else <$ stringParser "else"
-    fun = Keyword Fun <$ stringParser "fun"
-    for' = Keyword For <$ stringParser "for"
-    if' = Keyword If <$ stringParser "if"
-    nil = Keyword Nil <$ stringParser "nil"
-    or' = Keyword Or <$ stringParser "or"
-    print' = Keyword Print <$ stringParser "print"
-    return' = Keyword Return <$ stringParser "return"
-    super = Keyword Super <$ stringParser "super"
-    this = Keyword This <$ stringParser "this"
-    var = Keyword Var <$ stringParser "var"
-    while = Keyword While <$ stringParser "while"
+    tokenTrue = Keyword True' <$ stringParser "true"
+    tokenFalse = Keyword False' <$ stringParser "false"
 
 -- TODO: no test coverage, unlike fewCharToken and keywordToken
 singleCharToken :: Parser TokenType
@@ -255,12 +237,12 @@ tokenizer = singleCharToken <|> fewCharToken <|> keywordToken <|> literalToken
 --      three tokens and success. An `eof :: Parser ()` that fails on leftover
 --      input is what turns that into an error.
 --   2. it loops forever if tokenizer can succeed without consuming input --
-
+--      see the identifier TODO.
+--
 -- This shape is unchanged by the REPL. Input is just a String, so the lexer
 -- does not care where the text came from; the driver decides how much text is
 -- one lex, and each REPL entry is a complete source that must be fully
 -- consumed, so the trailing `eof` is still wanted there.
---      see the identifier TODO.
 
 -- tokenizeLine :: String -> [TokenType]
 -- tokenizeLine line = (runParser tokenizer) <$> (words line)
