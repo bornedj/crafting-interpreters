@@ -24,12 +24,16 @@ data TokenType
   | Eof
   deriving (Show, Eq)
 
+type LineNumber = Int
+type ColumnNumber = Int
+
 -- TODO: populate lexeme/line/column once in a
 -- `located :: Parser TokenType -> Parser Token` combinator rather than in every
 -- token rule, since the rules below all use `<$` and discard the text they
 -- matched. Taking the length difference between the input before and after a
 -- rule runs recovers the lexeme without touching any of them.
-data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int, columnNumber :: Int} deriving (Show, Eq)
+data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: LineNumber, columnNumber :: ColumnNumber} deriving (Show, Eq)
+
 
 -- TODO: split this into two constructors, UnexpectedEof and Unexpected. The
 -- REPL feeds one getLine entry at a time, so it has to tell "incomplete, could
@@ -40,7 +44,7 @@ data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int,
 -- Chapter 4 should still report and reset on an unterminated string, matching
 -- the book; the constructor split is worth doing now only because it is cheap
 -- and is what a continuation prompt would later need.
-data ParserError = Unexpected Int Int String  | UnexpectedEof Int String deriving (Show, Eq)
+data ParserError = Unexpected LineNumber ColumnNumber String  | UnexpectedEof ColumnNumber String deriving (Show, Eq)
 
 -- TODO: replace inputLoc with inputLine and inputCol. Tracking position here,
 -- rather than by splitting the source with `lines` and zipping line numbers,
@@ -56,14 +60,14 @@ data ParserError = Unexpected Int Int String  | UnexpectedEof Int String derivin
 -- `mkInputAt :: Int -> String -> Input` and a counter threaded through the REPL
 -- loop.
 data Input = Input
-  { inputLine :: Int,
-    inputCol :: Int,
+  { inputLine :: LineNumber,
+    inputCol :: ColumnNumber,
     inputStr :: String
   }
   deriving (Show, Eq)
 
 -- lines will be 1 indexed like the book
-mkInputAt :: Int -> String -> Input
+mkInputAt :: LineNumber -> String -> Input
 mkInputAt line i = Input line 0 i
 
 -- lines will be 1 indexed like the book
@@ -107,8 +111,6 @@ instance Alternative Parser where
 -- "definitely wrong here".
 instance Alternative (Either ParserError) where
   empty = Left $ Unexpected 0 1 "empty"
-  Left parseError@(UnexpectedEof pos message) <|> e2 = parseError
-  e1 <|> Left parseError@(UnexpectedEof pos message) = parseError
   Left _ <|> e2 = e2
   e1 <|> _ = e1
 
@@ -119,13 +121,14 @@ charParser x = Parser f
       | y == x = Right (ys, x)
       | otherwise =
           Left $
-            ParserError
-              (inputLoc input)
+            Unexpected
+              (inputLine input)
+              (inputCol input)
               ("Expected '" ++ [x] ++ "', but found '" ++ [y] ++ "'")
     f input =
       Left $
-        ParserError
-          (inputLoc input)
+        UnexpectedEof
+          (inputLine input)
           ("Expected '" ++ [x] ++ "', but reached end of string")
 
 stringParser :: String -> Parser String
@@ -133,7 +136,7 @@ stringParser str = Parser f
   where
     f input = case runParser (traverse charParser str) input of
       Left _ ->
-        Left $ ParserError (inputLoc input) ("Expected \"" ++ str ++ "', but found '" ++ inputStr input ++ "'")
+        Left $ Unexpected (inputLine input) (inputCol input) ("Expected \"" ++ str ++ "', but found '" ++ inputStr input ++ "'")
       result -> result
 
 -- parse strings that statisfy a predicate
@@ -152,8 +155,8 @@ parseIf desc predicate = Parser f
         | predicate y -> Right (ys, y)
         | otherwise ->
             Left $
-              ParserError (inputLoc input) ("Expected " ++ desc ++ ", but found '" ++ [y] ++ "'")
-      _ -> Left $ ParserError (inputLoc input) ("Expected " ++ desc ++ ", but reached the end of a string")
+              Unexpected (inputLine input) (inputCol input) ("Expected " ++ desc ++ ", but found '" ++ [y] ++ "'")
+      _ -> Left $ UnexpectedEof (inputLine input) ("Expected " ++ desc ++ ", but reached the end of a string")
 
 -- white space parser
 ws :: Parser String
