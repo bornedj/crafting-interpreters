@@ -12,23 +12,16 @@ data SingleCharTokenType = LeftParen | RightParen | LeftBrace | RightBrace | Com
 
 data FewCharTokenType = Bang | BangEqual | Equal | EqualEqual | Greater | GreaterEqual | Lesser | LesserEqual deriving (Show, Eq)
 
--- TODO: these carry no value, so the scanned text is lost. The book's Token has
--- an `Object literal` field for exactly this; in Haskell the payload belongs on
--- the constructors: Identifier String | String' String | Number Double. Lox
--- numbers are all doubles, so "123" lexes to 123.0.
-data LiteralTokenType = Identifier | String' | Number deriving (Show, Eq)
+data LiteralTokenType = Identifier String | String' String | Double String deriving (Show, Eq)
 
 data KeywordsTokenType = And | Class | Else | False' | True' | Fun | For | If | Nil | Or | Print | Return | Super | This | Var | While deriving (Show, Eq)
 
--- TODO: missing an Eof constructor. The four groups below cover 38 of the
--- book's 39 token types, and EOF is the difference: scanTokens appends one, and
--- the chapter 6 parser relies on it to know when to stop. It belongs here
--- rather than inside any of the groups.
 data TokenType
   = SingleChar SingleCharTokenType
   | FewChar FewCharTokenType
   | Literal LiteralTokenType
   | Keyword KeywordsTokenType
+  | Eof
   deriving (Show, Eq)
 
 -- TODO: populate lexeme/line/column once in a
@@ -36,9 +29,7 @@ data TokenType
 -- token rule, since the rules below all use `<$` and discard the text they
 -- matched. Taking the length difference between the input before and after a
 -- rule runs recovers the lexeme without touching any of them.
--- TODO: needs `deriving (Show, Eq)`. Show is what chapter 4 ends on, run
--- printing each scanned token; Eq is what lets the tests compare one.
-data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int, columnNumber :: Int}
+data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int, columnNumber :: Int} deriving (Show, Eq)
 
 -- TODO: split this into two constructors, UnexpectedEof and Unexpected. The
 -- REPL feeds one getLine entry at a time, so it has to tell "incomplete, could
@@ -49,7 +40,7 @@ data Token = Token {tokenType :: TokenType, lexeme :: String, lineNumber :: Int,
 -- Chapter 4 should still report and reset on an unterminated string, matching
 -- the book; the constructor split is worth doing now only because it is cheap
 -- and is what a continuation prompt would later need.
-data ParserError = ParserError Int Int String deriving (Show, Eq)
+data ParserError = Unexpected Int Int String  | UnexpectedEof Int String deriving (Show, Eq)
 
 -- TODO: replace inputLoc with inputLine and inputCol. Tracking position here,
 -- rather than by splitting the source with `lines` and zipping line numbers,
@@ -65,18 +56,28 @@ data ParserError = ParserError Int Int String deriving (Show, Eq)
 -- `mkInputAt :: Int -> String -> Input` and a counter threaded through the REPL
 -- loop.
 data Input = Input
-  { inputLoc :: Int,
+  { inputLine :: Int,
+    inputCol :: Int,
     inputStr :: String
   }
   deriving (Show, Eq)
+
+-- lines will be 1 indexed like the book
+mkInputAt :: Int -> String -> Input
+mkInputAt line i = Input line 0 i
+
+-- lines will be 1 indexed like the book
+mkInput :: String -> Input
+mkInput i = Input 1 0 i
 
 -- TODO: special-case '\n' to increment the line and reset the column. Every
 -- combinator below routes through here, so they all inherit correct tracking.
 -- `ws` uses isSpace, which consumes newlines, so line counting between tokens
 -- comes free once this is done.
 inputUncons :: Input -> Maybe (Char, Input)
-inputUncons (Input _ []) = Nothing
-inputUncons (Input loc (x : xs)) = Just (x, Input (loc + 1) xs)
+inputUncons (Input _ _ []) = Nothing
+inputUncons (Input line col ('\n' : xs)) = Just ('\n', Input (line + 1) (col + 1) xs)
+inputUncons (Input line col (x : xs)) = Just (x, Input line (col + 1) xs)
 
 newtype Parser a = Parser {runParser :: Input -> Either ParserError (Input, a)}
 
@@ -105,7 +106,9 @@ instance Alternative Parser where
 -- end-of-input failure: "might still be completable" tells the REPL more than
 -- "definitely wrong here".
 instance Alternative (Either ParserError) where
-  empty = Left $ ParserError 0 "empty"
+  empty = Left $ Unexpected 0 1 "empty"
+  Left parseError@(UnexpectedEof pos message) <|> e2 = parseError
+  e1 <|> Left parseError@(UnexpectedEof pos message) = parseError
   Left _ <|> e2 = e2
   e1 <|> _ = e1
 
