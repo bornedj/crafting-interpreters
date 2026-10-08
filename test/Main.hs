@@ -10,26 +10,26 @@ main = hspec $ do
     context "double character sequences" $ do
       it "returns double equal" $ do
         let doubleEquals = mkInput "=="
-            expected = Right (Input 1 2 "", FewChar EqualEqual)
+            expected = Right (Input 1 3 "", FewChar EqualEqual)
             result = runParser fewCharToken doubleEquals
         result `shouldBe` expected
       it "returns not equal" $ do
         let notEqual = mkInput "!="
-            expected = Right (Input 1 2 "", FewChar BangEqual)
+            expected = Right (Input 1 3 "", FewChar BangEqual)
             result = runParser fewCharToken notEqual
         result `shouldBe` expected
       it "returns greater equal" $ do
         let greaterEqual = mkInput ">="
-            expected = Right (Input 1 2 "", FewChar GreaterEqual)
+            expected = Right (Input 1 3 "", FewChar GreaterEqual)
             result = runParser fewCharToken greaterEqual
         result `shouldBe` expected
       it "returns lesser equal" $ do
         let lesserEqual = mkInput "<="
-            expected = Right (Input 1 2 "", FewChar LesserEqual)
+            expected = Right (Input 1 3 "", FewChar LesserEqual)
             result = runParser fewCharToken lesserEqual
         result `shouldBe` expected
   describe "Lexer.singleCharToken" $ do
-    let expectedInput = Input 1 1 ""
+    let expectedInput = Input 1 2 ""
         testCases =
           [ (mkInput "(", "left paren", Right (expectedInput, SingleChar LeftParen)),
             (mkInput ")", "right paren", Right (expectedInput, SingleChar RightParen)),

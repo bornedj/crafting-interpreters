@@ -48,22 +48,17 @@ data Input = Input
   }
   deriving (Show, Eq)
 
--- TODO: lines are 1 indexed like the book, but columns start at 0 here and
--- inputUncons resets to 0 on '\n' (both consistent, so no drift), which means
--- every error currently reads "line 1, column 0" for the first character.
--- Decide 0- vs 1-indexed columns before writing `located`, since it stamps
--- inputCol onto every Token; 1-indexed to match lines is the natural choice.
--- lines will be 1 indexed like the book
+-- lines and cols will be 1 indexed like the book
 mkInputAt :: LineNumber -> String -> Input
-mkInputAt line i = Input line 0 i
+mkInputAt line i = Input line 1 i
 
--- lines will be 1 indexed like the book
+-- lines and columns will be 1 indexed like the book
 mkInput :: String -> Input
-mkInput i = Input 1 0 i
+mkInput i = Input 1 1 i
 
 inputUncons :: Input -> Maybe (Char, Input)
 inputUncons (Input _ _ []) = Nothing
-inputUncons (Input line _ ('\n' : xs)) = Just ('\n', Input (line + 1) 0 xs)
+inputUncons (Input line _ ('\n' : xs)) = Just ('\n', Input (line + 1) 1 xs)
 inputUncons (Input line col (x : xs)) = Just (x, Input line (col + 1) xs)
 
 newtype Parser a = Parser {runParser :: Input -> Either ParserError (Input, a)}
