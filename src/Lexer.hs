@@ -92,7 +92,7 @@ instance Alternative (Either ParserError) where
   -- line 0 and col 1 are inconsistent with each other regardless of which way
   -- the column-indexing TODO on mkInput is decided -- worth fixing alongside
   -- it if this ever becomes reachable
-  empty = Left $ Unexpected 0 1 "empty"
+  empty = Left $ Unexpected 1 1 "empty"
   Left _ <|> e2 = e2
   e1 <|> _ = e1
 
@@ -169,8 +169,6 @@ singleCharToken = leftParen <|> rightParen <|> leftBrace <|> rightBrace <|> comm
     -- slash = SingleChar Slash <$ stringParser "/"
     star = SingleChar Star <$ stringParser "*"
 
--- Ordering is load-bearing: <|> retries from the original input, so the longest
--- alternative must come first or "!=" stops after matching the '!'.
 fewCharToken :: Parser TokenType
 fewCharToken = bangEqual <|> bang <|> equalEqual <|> equal <|> greaterEqual <|> greater <|> lesserEqual <|> lesser
   where
