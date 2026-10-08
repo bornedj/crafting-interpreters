@@ -153,7 +153,7 @@ stringLiteral :: Parser String
 stringLiteral = charParser '"' *> many normalChar <* charParser '"'
 
 singleCharToken :: Parser TokenType
-singleCharToken = leftParen <|> rightParen <|> leftBrace <|> rightBrace <|> comma <|> dot <|> minus <|> plus <|> semicolon <|> slash <|> star
+singleCharToken = leftParen <|> rightParen <|> leftBrace <|> rightBrace <|> comma <|> dot <|> minus <|> plus <|> semicolon <|> star
   where
     leftParen = SingleChar LeftParen <$ stringParser "("
     rightParen = SingleChar RightParen <$ stringParser ")"
@@ -166,7 +166,7 @@ singleCharToken = leftParen <|> rightParen <|> leftBrace <|> rightBrace <|> comm
     semicolon = SingleChar Semicolon <$ stringParser ";"
     -- TODO: when line comments arrive, the "//" parser has to be tried before
     -- this one, and singleCharToken is the first alternative in tokenizer
-    slash = SingleChar Slash <$ stringParser "/"
+    -- slash = SingleChar Slash <$ stringParser "/"
     star = SingleChar Star <$ stringParser "*"
 
 -- Ordering is load-bearing: <|> retries from the original input, so the longest

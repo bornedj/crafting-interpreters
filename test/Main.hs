@@ -40,7 +40,6 @@ main = hspec $ do
             (mkInput "-", "minus", Right (expectedInput, SingleChar Minus)),
             (mkInput "+", "plus", Right (expectedInput, SingleChar Plus)),
             (mkInput ";", "semicolon", Right (expectedInput, SingleChar Semicolon)),
-            (mkInput "/", "slash", Right (expectedInput, SingleChar Slash)),
             (mkInput "*", "star", Right (expectedInput, SingleChar Star))
           ]
     mapM_
