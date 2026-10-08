@@ -157,15 +157,6 @@ normalChar = parseIf "non-special character" ((&&) <$> (/= '"') <*> (/= '\\'))
 stringLiteral :: Parser String
 stringLiteral = charParser '"' *> many normalChar <* charParser '"'
 
--- TODO: this parser goes away entirely once keywords are recognised via the
--- identifier lookup below.
-boolToken :: Parser TokenType
-boolToken = tokenTrue <|> tokenFalse
-  where
-    tokenTrue = Keyword True' <$ stringParser "true"
-    tokenFalse = Keyword False' <$ stringParser "false"
-
--- TODO: no test coverage, unlike fewCharToken and keywordToken
 singleCharToken :: Parser TokenType
 singleCharToken = leftParen <|> rightParen <|> leftBrace <|> rightBrace <|> comma <|> dot <|> minus <|> plus <|> semicolon <|> slash <|> star
   where
@@ -220,7 +211,7 @@ literalToken = identifier <|> number <|> string
 -- demotes the trailing `eof` below from the thing that catches garbage to a
 -- redundant safety net.
 tokenizer :: Parser TokenType
-tokenizer = singleCharToken <|> fewCharToken <|> keywordToken <|> literalToken
+tokenizer = singleCharToken <|> fewCharToken <|> literalToken
 
 -- TODO: both of these sketches are dead ends, replace them with a single
 -- `many (ws *> located tokenizer) <* ws <* eof`. The repetition that jsonValue
